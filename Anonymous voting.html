@@ -1,124 +1,166 @@
+
 <!DOCTYPE html>
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <title>如果你是我——匿名投票站</title>
+  <title>如果你是我 · 匿名共感投票站</title>
   <style>
     body { font-family: sans-serif; max-width: 700px; margin: auto; padding: 20px; }
-    h1 { text-align: center; }
-    .card { background: #fff; padding: 15px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
-    .option, .result { margin: 5px 0; }
-    button { padding: 8px 16px; background: #0078D4; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
-    input, textarea { width: 100%; padding: 8px; margin: 5px 0; }
+    header { display: flex; justify-content: space-between; align-items: center; }
+    a.button, button { padding: 6px 12px; background: #0078D4; color: #fff; text-decoration: none; border: none; border-radius: 4px; cursor: pointer; }
+    .card { padding: 12px; margin: 12px 0; border: 1px solid #ddd; border-radius: 6px; }
+    section { display: none; }
+    section.active { display: block; }
+    textarea, input { width: 100%; margin: 6px 0; padding: 8px; }
+    .option, .result { margin: 6px 0; }
   </style>
 </head>
 <body>
 
-  <h1>如果你是我 🤔</h1>
+  <header>
+    <h1>如果你是我</h1>
+    <nav>
+      <a href="#/" class="button">首页</a>
+      <a href="#/ask" class="button">➕ 提问</a>
+    </nav>
+  </header>
 
-  <!-- 发布新投票题目 -->
-  <div class="card">
-    <h2>📝 发布新题目</h2>
-    <textarea id="qText" rows="2" placeholder="写下你的困境或选择题..."></textarea>
+  <!-- 首页：题目列表 -->
+  <section id="view-list" class="active">
+    <div id="list">加载中…</div>
+  </section>
+
+  <!-- 提问页：发布新题目 -->
+  <section id="view-ask">
+    <h2>➕ 发布新题目</h2>
+    <textarea id="qText" rows="2" placeholder="写下你的困境或选择题…"></textarea>
     <input id="o1" placeholder="选项 A">
     <input id="o2" placeholder="选项 B">
-    <input id="o3" placeholder="选项 C（可选）">
-    <button onclick="postPoll()">发布题目</button>
-  </div>
+    <input id="o3" placeholder="选项 C（可留空）">
+    <button id="postBtn">发布题目</button>
+  </section>
 
-  <!-- 显示所有投票题目 -->
-  <div id="pollList"></div>
+  <!-- 投票页：具体投票与结果 -->
+  <section id="view-poll">
+    <div id="pollContent">加载中…</div>
+  </section>
 
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script>
-    // TODO: 将下面配置替换为你自己的 firebaseConfig
+    // TODO: 填入你的 Firebase 配置
     const firebaseConfig = {
       apiKey: "YOUR_API_KEY",
       authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
       projectId: "YOUR_PROJECT_ID",
-      // ...
     };
-
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const pollsCol = db.collection('polls');
 
-    // 发布新题目
-    async function postPoll() {
-      const question = document.getElementById('qText').value.trim();
-      const opts = [
-        document.getElementById('o1').value.trim(),
-        document.getElementById('o2').value.trim(),
-        document.getElementById('o3').value.trim()
-      ].filter(o => o);
-
-      if (!question || opts.length < 2) {
-        alert('请填写题目并至少两个选项');
-        return;
+    // 路由功能：根据 hash 选择视图
+    function router() {
+      const hash = location.hash.split('?')[0];
+      document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+      if (hash === '#/ask') {
+        document.getElementById('view-ask').classList.add('active');
+      } else if (hash === '#/poll') {
+        document.getElementById('view-poll').classList.add('active');
+        loadPoll(new URLSearchParams(location.hash.split('?')[1]).get('id'));
+      } else {
+        document.getElementById('view-list').classList.add('active');
+        loadList();
       }
+    }
 
+    // 加载首页题目列表
+    function loadList() {
+      const list = document.getElementById('list');
+      list.innerHTML = '加载中…';
+      pollsCol.orderBy('createdAt', 'desc').get().then(snap => {
+        list.innerHTML = '';
+        if (snap.empty) {
+          list.innerHTML = '<p>暂无题目，快去发布一个吧！</p>';
+          return;
+        }
+        snap.forEach(doc => {
+          const d = doc.data();
+          const div = document.createElement('div');
+          div.className = 'card';
+          div.innerHTML = `
+            <h3>${d.question}</h3>
+            <a href="#/poll?id=${doc.id}" class="button">去投票 →</a>
+          `;
+          list.appendChild(div);
+        });
+      });
+    }
+
+    // 发布新题目
+    document.getElementById('postBtn').onclick = async () => {
+      const question = document.getElementById('qText').value.trim();
+      const opts = ['o1','o2','o3']
+        .map(id => document.getElementById(id).value.trim())
+        .filter(v => v);
+      if (!question || opts.length < 2) {
+        return alert('请填写题目并至少两个选项');
+      }
       await pollsCol.add({
         question,
         options: opts,
         votes: opts.map(_ => 0),
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
+      location.hash = '#/';
+    };
 
-      document.getElementById('qText').value = '';
-      document.getElementById('o1').value = '';
-      document.getElementById('o2').value = '';
-      document.getElementById('o3').value = '';
-    }
+    // 加载并渲染单个投票
+    function loadPoll(id) {
+      const content = document.getElementById('pollContent');
+      if (!id) {
+        return content.innerHTML = '<p>无效链接。</p>';
+      }
+      content.innerHTML = '加载中…';
+      pollsCol.doc(id).onSnapshot(doc => {
+        if (!doc.exists) {
+          return content.innerHTML = '<p>题目不存在或已删除。</p>';
+        }
+        const data = doc.data();
+        let html = `<h2>${data.question}</h2>`;
+        data.options.forEach((opt, i) => {
+          html += `
+            <div class="option">
+              <input type="radio" name="vote" value="${i}"> ${opt}
+            </div>
+          `;
+        });
+        html += `<button id="voteBtn">投 票</button>`;
+        html += `<div id="results"><h3>投票结果：</h3></div>`;
+        content.innerHTML = html;
 
-    // 渲染所有题目
-    function renderPoll(doc) {
-      const data = doc.data();
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = `<h3>${data.question}</h3>`;
+        // 渲染结果
+        const resDiv = document.getElementById('results');
+        resDiv.innerHTML += data.options
+          .map((opt, i) => `<p class="result">${opt}：${data.votes[i] || 0} 票</p>`)
+          .join('');
 
-      // 选项列表
-      data.options.forEach((opt, i) => {
-        card.innerHTML += `
-          <div class="option">
-            <input type="radio" name="vote_${doc.id}" value="${i}"> ${opt}
-          </div>
-        `;
+        // 提交投票
+        document.getElementById('voteBtn').onclick = async () => {
+          const sel = document.querySelector('input[name="vote"]:checked');
+          if (!sel) return alert('请选择一个选项');
+          const idx = Number(sel.value);
+          const newVotes = data.votes.slice();
+          newVotes[idx] = (newVotes[idx] || 0) + 1;
+          await pollsCol.doc(id).update({ votes: newVotes });
+        };
       });
-
-      card.innerHTML += `<button onclick="castVote('${doc.id}', ${JSON.stringify(data.votes)})">投票</button>`;
-      card.innerHTML += `<div id="res_${doc.id}"></div>`;
-
-      document.getElementById('pollList').prepend(card);
-      updateResults(doc.id, data.votes, data.options);
     }
 
-    // 更新投票结果
-    function updateResults(id, votes, options) {
-      const resDiv = document.getElementById(`res_${id}`);
-      resDiv.innerHTML = '<h4>投票结果：</h4>' +
-        options.map((opt, i) => `<p class="result">${opt}：${votes[i]} 票</p>`).join('');
-    }
-
-    // 处理投票逻辑
-    async function castVote(id, oldVotes) {
-      const sel = document.querySelector(`input[name="vote_${id}"]:checked`);
-      if (!sel) { alert('请选择一个选项！'); return; }
-      const idx = Number(sel.value);
-      const newVotes = oldVotes.slice();
-      newVotes[idx]++;
-
-      await pollsCol.doc(id).update({ votes: newVotes });
-    }
-
-    // 实时监听新增或更新
-    pollsCol.orderBy('createdAt', 'desc').onSnapshot(snapshot => {
-      document.getElementById('pollList').innerHTML = '';
-      snapshot.forEach(doc => renderPoll(doc));
-    });
+    // 监听哈希变化
+    window.addEventListener('hashchange', router);
+    // 首次加载
+    router();
   </script>
-
 </body>
 </html>
