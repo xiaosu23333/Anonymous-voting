@@ -3,11 +3,14 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <title>如果你是我 · 匿名共感投票站</title>
+  <title>匿名问答 · 匿名共感投票站</title>
   <style>
     body { font-family: sans-serif; max-width: 700px; margin: auto; padding: 20px; }
     header { display: flex; justify-content: space-between; align-items: center; }
-    a.button, button { padding: 6px 12px; background: #0078D4; color: #fff; text-decoration: none; border: none; border-radius: 4px; cursor: pointer; }
+    nav a.button, button {
+      padding: 6px 12px; background: #0078D4; color: #fff;
+      text-decoration: none; border: none; border-radius: 4px; cursor: pointer;
+    }
     .card { padding: 12px; margin: 12px 0; border: 1px solid #ddd; border-radius: 6px; }
     section { display: none; }
     section.active { display: block; }
@@ -18,10 +21,10 @@
 <body>
 
   <header>
-    <h1>如果你是我</h1>
+    <h1>匿名问答</h1>
     <nav>
       <a href="#/" class="button">首页</a>
-      <a href="#/ask" class="button">➕ 提问</a>
+      <a href="#/ask" class="button">➕ 发布</a>
     </nav>
   </header>
 
@@ -33,7 +36,7 @@
   <!-- 提问页：发布新题目 -->
   <section id="view-ask">
     <h2>➕ 发布新题目</h2>
-    <textarea id="qText" rows="2" placeholder="写下你的困境或选择题…"></textarea>
+    <textarea id="qText" rows="2" placeholder="写下你的问题…"></textarea>
     <input id="o1" placeholder="选项 A">
     <input id="o2" placeholder="选项 B">
     <input id="o3" placeholder="选项 C（可留空）">
@@ -49,17 +52,18 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script>
-    // TODO: 填入你的 Firebase 配置
+    // —— 填入你的 Firebase 配置 —— 
     const firebaseConfig = {
       apiKey: "YOUR_API_KEY",
       authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
       projectId: "YOUR_PROJECT_ID",
+      // …其余可选字段
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const pollsCol = db.collection('polls');
 
-    // 路由功能：根据 hash 选择视图
+    // 路由控制
     function router() {
       const hash = location.hash.split('?')[0];
       document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
@@ -67,30 +71,31 @@
         document.getElementById('view-ask').classList.add('active');
       } else if (hash === '#/poll') {
         document.getElementById('view-poll').classList.add('active');
-        loadPoll(new URLSearchParams(location.hash.split('?')[1]).get('id'));
+        const id = new URLSearchParams(location.hash.split('?')[1]).get('id');
+        loadPoll(id);
       } else {
         document.getElementById('view-list').classList.add('active');
         loadList();
       }
     }
 
-    // 加载首页题目列表
+    // 加载题目列表
     function loadList() {
       const list = document.getElementById('list');
       list.innerHTML = '加载中…';
       pollsCol.orderBy('createdAt', 'desc').get().then(snap => {
-        list.innerHTML = '';
         if (snap.empty) {
-          list.innerHTML = '<p>暂无题目，快去发布一个吧！</p>';
+          list.innerHTML = '<p>暂无问题，快去发布一个吧！</p>';
           return;
         }
+        list.innerHTML = '';
         snap.forEach(doc => {
           const d = doc.data();
           const div = document.createElement('div');
           div.className = 'card';
           div.innerHTML = `
             <h3>${d.question}</h3>
-            <a href="#/poll?id=${doc.id}" class="button">去投票 →</a>
+            <a href="#/poll?id=${doc.id}" class="button">去回答 →</a>
           `;
           list.appendChild(div);
         });
@@ -104,7 +109,7 @@
         .map(id => document.getElementById(id).value.trim())
         .filter(v => v);
       if (!question || opts.length < 2) {
-        return alert('请填写题目并至少两个选项');
+        return alert('请填写问题并至少两个选项');
       }
       await pollsCol.add({
         question,
@@ -118,13 +123,11 @@
     // 加载并渲染单个投票
     function loadPoll(id) {
       const content = document.getElementById('pollContent');
-      if (!id) {
-        return content.innerHTML = '<p>无效链接。</p>';
-      }
+      if (!id) return content.innerHTML = '<p>无效链接。</p>';
       content.innerHTML = '加载中…';
       pollsCol.doc(id).onSnapshot(doc => {
         if (!doc.exists) {
-          return content.innerHTML = '<p>题目不存在或已删除。</p>';
+          return content.innerHTML = '<p>问题不存在或已被删除。</p>';
         }
         const data = doc.data();
         let html = `<h2>${data.question}</h2>`;
@@ -135,14 +138,14 @@
             </div>
           `;
         });
-        html += `<button id="voteBtn">投 票</button>`;
-        html += `<div id="results"><h3>投票结果：</h3></div>`;
+        html += `<button id="voteBtn">提交回答</button>`;
+        html += `<div id="results"><h3>当前统计：</h3></div>`;
         content.innerHTML = html;
 
-        // 渲染结果
+        // 渲染统计
         const resDiv = document.getElementById('results');
         resDiv.innerHTML += data.options
-          .map((opt, i) => `<p class="result">${opt}：${data.votes[i] || 0} 票</p>`)
+          .map((opt, i) => `<p class="result">${opt}：${data.votes[i] || 0} 次</p>`)
           .join('');
 
         // 提交投票
@@ -157,9 +160,7 @@
       });
     }
 
-    // 监听哈希变化
     window.addEventListener('hashchange', router);
-    // 首次加载
     router();
   </script>
 </body>
