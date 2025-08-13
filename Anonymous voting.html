@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>如果你是我——匿名投票站</title>
+  <style>
+    body { font-family: sans-serif; max-width: 700px; margin: auto; padding: 20px; }
+    h1 { text-align: center; }
+    .card { background: #fff; padding: 15px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    .option, .result { margin: 5px 0; }
+    button { padding: 8px 16px; background: #0078D4; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+    input, textarea { width: 100%; padding: 8px; margin: 5px 0; }
+  </style>
+</head>
+<body>
+
+  <h1>如果你是我 🤔</h1>
+
+  <!-- 发布新投票题目 -->
+  <div class="card">
+    <h2>📝 发布新题目</h2>
+    <textarea id="qText" rows="2" placeholder="写下你的困境或选择题..."></textarea>
+    <input id="o1" placeholder="选项 A">
+    <input id="o2" placeholder="选项 B">
+    <input id="o3" placeholder="选项 C（可选）">
+    <button onclick="postPoll()">发布题目</button>
+  </div>
+
+  <!-- 显示所有投票题目 -->
+  <div id="pollList"></div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script>
+    // TODO: 将下面配置替换为你自己的 firebaseConfig
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      // ...
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const pollsCol = db.collection('polls');
+
+    // 发布新题目
+    async function postPoll() {
+      const question = document.getElementById('qText').value.trim();
+      const opts = [
+        document.getElementById('o1').value.trim(),
+        document.getElementById('o2').value.trim(),
+        document.getElementById('o3').value.trim()
+      ].filter(o => o);
+
+      if (!question || opts.length < 2) {
+        alert('请填写题目并至少两个选项');
+        return;
+      }
+
+      await pollsCol.add({
+        question,
+        options: opts,
+        votes: opts.map(_ => 0),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      document.getElementById('qText').value = '';
+      document.getElementById('o1').value = '';
+      document.getElementById('o2').value = '';
+      document.getElementById('o3').value = '';
+    }
+
+    // 渲染所有题目
+    function renderPoll(doc) {
+      const data = doc.data();
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `<h3>${data.question}</h3>`;
+
+      // 选项列表
+      data.options.forEach((opt, i) => {
+        card.innerHTML += `
+          <div class="option">
+            <input type="radio" name="vote_${doc.id}" value="${i}"> ${opt}
+          </div>
+        `;
+      });
+
+      card.innerHTML += `<button onclick="castVote('${doc.id}', ${JSON.stringify(data.votes)})">投票</button>`;
+      card.innerHTML += `<div id="res_${doc.id}"></div>`;
+
+      document.getElementById('pollList').prepend(card);
+      updateResults(doc.id, data.votes, data.options);
+    }
+
+    // 更新投票结果
+    function updateResults(id, votes, options) {
+      const resDiv = document.getElementById(`res_${id}`);
+      resDiv.innerHTML = '<h4>投票结果：</h4>' +
+        options.map((opt, i) => `<p class="result">${opt}：${votes[i]} 票</p>`).join('');
+    }
+
+    // 处理投票逻辑
+    async function castVote(id, oldVotes) {
+      const sel = document.querySelector(`input[name="vote_${id}"]:checked`);
+      if (!sel) { alert('请选择一个选项！'); return; }
+      const idx = Number(sel.value);
+      const newVotes = oldVotes.slice();
+      newVotes[idx]++;
+
+      await pollsCol.doc(id).update({ votes: newVotes });
+    }
+
+    // 实时监听新增或更新
+    pollsCol.orderBy('createdAt', 'desc').onSnapshot(snapshot => {
+      document.getElementById('pollList').innerHTML = '';
+      snapshot.forEach(doc => renderPoll(doc));
+    });
+  </script>
+
+</body>
+</html>
