@@ -16,7 +16,7 @@
         .poll-item .choices { margin-top: 10px; }
         .poll-item .choices button { display: block; width: 100%; text-align: left; padding: 10px; margin-bottom: 5px; border: 1px solid #ccc; background-color: #f9f9f9; cursor: pointer; border-radius: 4px; }
         .poll-item .choices button:hover { background-color: #e9e9e9; }
-        #new-poll-form, #results { display: none; margin-top: 20px; }
+        #publish-page { display: none; margin-top: 20px; }
         #new-poll-form input { display: block; width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         #new-poll-form button { width: 100%; }
         #loading { text-align: center; color: #888; }
@@ -38,7 +38,7 @@
         <div id="poll-list" class="poll-list"></div>
     </div>
 
-    <div id="publish-page" style="display:none;">
+    <div id="publish-page">
         <h2>➕ 发布新问题</h2>
         <form id="new-poll-form">
             <input type="text" id="question-input" placeholder="输入问题" required>
@@ -94,7 +94,6 @@
             pollList.innerHTML = '';
             try {
                 const snapshot = await db.collection('polls').orderBy('createdAt', 'desc').get();
-
                 if (snapshot.empty) {
                     pollList.innerHTML = '<p>暂无问题，快去发布一个吧！</p>';
                 } else {
@@ -121,7 +120,6 @@
                                         if (!doc.exists) {
                                             throw "Document does not exist!";
                                         }
-
                                         const newChoices = doc.data().choices;
                                         newChoices[index].votes = (newChoices[index].votes || 0) + 1;
                                         transaction.update(pollDoc, { choices: newChoices });
@@ -176,7 +174,7 @@
             }
         });
 
-        // 初始化
+        // 页面初始化
         showPage('home-page');
         fetchPolls();
     </script>
