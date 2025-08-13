@@ -1,182 +1,316 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>匿名问答</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; line-height: 1.6; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .header h1 { margin: 0; }
-        .header button { padding: 8px 16px; font-size: 16px; cursor: pointer; border: none; border-radius: 4px; background-color: #007bff; color: white; }
-        .header button.active { background-color: #0056b3; }
-        .poll-list { margin-top: 20px; }
-        .poll-item { border: 1px solid #ddd; padding: 15px; margin-bottom: 10px; border-radius: 8px; }
-        .poll-item h3 { margin-top: 0; }
-        .poll-item .choices { margin-top: 10px; }
-        .poll-item .choices button { display: block; width: 100%; text-align: left; padding: 10px; margin-bottom: 5px; border: 1px solid #ccc; background-color: #f9f9f9; cursor: pointer; border-radius: 4px; }
-        .poll-item .choices button:hover { background-color: #e9e9e9; }
-        #publish-page { display: none; margin-top: 20px; }
-        #new-poll-form input { display: block; width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        #new-poll-form button { width: 100%; }
-        #loading { text-align: center; color: #888; }
-        .result-bar-container { background-color: #f0f0f0; border-radius: 4px; overflow: hidden; margin-top: 5px; }
-        .result-bar { height: 20px; background-color: #007bff; color: white; text-align: right; padding-right: 5px; line-height: 20px; transition: width 0.5s ease-in-out; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>匿名问答</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      max-width: 800px;
+      margin: auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .header h1 {
+      margin: 0;
+    }
+    .header button {
+      padding: 8px 16px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      background-color: #007bff;
+      color: white;
+      margin-left: 8px;
+    }
+    .header button.active {
+      background-color: #0056b3;
+    }
+    #home-page, #publish-page {
+      display: none;
+    }
+    #home-page.active, #publish-page.active {
+      display: block;
+    }
+    .poll-list {
+      margin-top: 20px;
+    }
+    .poll-item {
+      border: 1px solid #ddd;
+      padding: 15px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+    }
+    .poll-item h3 {
+      margin-top: 0;
+    }
+    .choices button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 10px;
+      margin-bottom: 5px;
+      border: 1px solid #ccc;
+      background-color: #f9f9f9;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .choices button:hover {
+      background-color: #e9e9e9;
+    }
+    .result-bar-container {
+      background-color: #f0f0f0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 5px 0 10px;
+    }
+    .result-bar {
+      height: 20px;
+      background-color: #007bff;
+      color: white;
+      text-align: right;
+      padding-right: 5px;
+      line-height: 20px;
+      transition: width 0.5s ease-in-out;
+    }
+    #new-poll-form input {
+      display: block;
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    #new-poll-form button {
+      width: 100%;
+      padding: 10px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    #add-choice-btn {
+      width: 100%;
+      padding: 6px;
+      background-color: #17a2b8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      margin-bottom: 10px;
+    }
+    #loading {
+      text-align: center;
+      color: #888;
+    }
+  </style>
 </head>
 <body>
-    <div class="header">
-        <h1>匿名问答</h1>
-        <div>
-            <button id="home-btn">首页</button>
-            <button id="publish-btn">➕ 发布</button>
-        </div>
+  <div class="header">
+    <h1>匿名问答</h1>
+    <div>
+      <button id="home-btn" class="active">首页</button>
+      <button id="publish-btn">➕ 发布</button>
     </div>
+  </div>
 
-    <div id="home-page">
-        <div id="loading">加载中...</div>
-        <div id="poll-list" class="poll-list"></div>
-    </div>
+  <!-- 首页 -->
+  <div id="home-page" class="active">
+    <div id="loading">加载中...</div>
+    <div id="poll-list" class="poll-list"></div>
+  </div>
 
-    <div id="publish-page">
-        <h2>➕ 发布新问题</h2>
-        <form id="new-poll-form">
-            <input type="text" id="question-input" placeholder="输入问题" required>
-            <input type="text" class="choice-input" placeholder="选项 1" required>
-            <input type="text" class="choice-input" placeholder="选项 2" required>
-            <input type="text" class="choice-input" placeholder="选项 3">
-            <button type="submit">发布问题</button>
-        </form>
-    </div>
+  <!-- 发布页 -->
+  <div id="publish-page">
+    <h2>➕ 发布新问题</h2>
+    <form id="new-poll-form">
+      <input type="text" id="question-input" placeholder="输入问题" required />
+      <div id="choices-container">
+        <input type="text" class="choice-input" placeholder="选项 1" required />
+        <input type="text" class="choice-input" placeholder="选项 2" required />
+      </div>
+      <button id="add-choice-btn" type="button">➕ 添加选项</button>
+      <button type="submit">发布问题</button>
+    </form>
+  </div>
 
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-    <script>
-        // 您的 Firebase 配置对象
-        const firebaseConfig = {
-          apiKey: "AIzaSyBGz2BaihKW1xTr2yfu03Efm7YBuNskpvx0",
-          authDomain: "anonymous-voting-f6f92.firebaseapp.com",
-          projectId: "anonymous-voting-f6f92",
-          storageBucket: "anonymous-voting-f6f92.appspot.com",
-          messagingSenderId: "662798484522",
-          appId: "1:662798484522:web:491fe44a97fa809323ef53",
-          measurementId: "G-M3VYPKWG8T"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script>
+    // Firebase 配置
+    const firebaseConfig = {
+      apiKey: "AIzaSyBGz2BaihKW1xTr2yfu03Efm7YBuNskpvx0",
+      authDomain: "anonymous-voting-f6f92.firebaseapp.com",
+      projectId: "anonymous-voting-f6f92",
+      storageBucket: "anonymous-voting-f6f92.appspot.com",
+      messagingSenderId: "662798484522",
+      appId: "1:662798484522:web:491fe44a97fa809323ef53",
+      measurementId: "G-M3VYPKWG8T"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-        const homeBtn = document.getElementById('home-btn');
-        const publishBtn = document.getElementById('publish-btn');
-        const homePage = document.getElementById('home-page');
-        const publishPage = document.getElementById('publish-page');
-        const pollList = document.getElementById('poll-list');
-        const loadingDiv = document.getElementById('loading');
-        const newPollForm = document.getElementById('new-poll-form');
+    // 页面元素
+    const homeBtn = document.getElementById('home-btn');
+    const publishBtn = document.getElementById('publish-btn');
+    const homePage = document.getElementById('home-page');
+    const publishPage = document.getElementById('publish-page');
+    const pollList = document.getElementById('poll-list');
+    const loadingDiv = document.getElementById('loading');
+    const newPollForm = document.getElementById('new-poll-form');
+    const choicesContainer = document.getElementById('choices-container');
+    const addChoiceBtn = document.getElementById('add-choice-btn');
 
-        // 页面切换函数
-        function showPage(pageId) {
-            homePage.style.display = 'none';
-            publishPage.style.display = 'none';
-            document.getElementById(pageId).style.display = 'block';
-        }
+    // 切换页面
+    function showPage(page) {
+      homePage.classList.remove('active');
+      publishPage.classList.remove('active');
+      homeBtn.classList.remove('active');
+      publishBtn.classList.remove('active');
 
-        homeBtn.addEventListener('click', () => {
-            showPage('home-page');
-            fetchPolls();
-        });
+      if (page === 'home') {
+        homePage.classList.add('active');
+        homeBtn.classList.add('active');
+      } else {
+        publishPage.classList.add('active');
+        publishBtn.classList.add('active');
+      }
+    }
 
-        publishBtn.addEventListener('click', () => {
-            showPage('publish-page');
-        });
+    homeBtn.addEventListener('click', () => {
+      showPage('home');
+      fetchPolls();
+    });
 
-        async function fetchPolls() {
-            loadingDiv.style.display = 'block';
-            pollList.innerHTML = '';
-            try {
-                const snapshot = await db.collection('polls').orderBy('createdAt', 'desc').get();
-                if (snapshot.empty) {
-                    pollList.innerHTML = '<p>暂无问题，快去发布一个吧！</p>';
-                } else {
-                    snapshot.forEach(doc => {
-                        const poll = doc.data();
-                        const pollId = doc.id;
-                        const question = poll.question;
-                        const choices = poll.choices || [];
-                        const pollItem = document.createElement('div');
-                        pollItem.className = 'poll-item';
-                        pollItem.innerHTML = `<h3>${question}</h3>`;
+    publishBtn.addEventListener('click', () => showPage('publish'));
 
-                        const choicesDiv = document.createElement('div');
-                        choicesDiv.className = 'choices';
-                        choices.forEach((choice, index) => {
-                            const choiceBtn = document.createElement('button');
-                            choiceBtn.textContent = choice.text;
-                            choiceBtn.addEventListener('click', async () => {
-                                // 投票逻辑
-                                try {
-                                    const pollDoc = db.collection('polls').doc(pollId);
-                                    await db.runTransaction(async (transaction) => {
-                                        const doc = await transaction.get(pollDoc);
-                                        if (!doc.exists) {
-                                            throw "Document does not exist!";
-                                        }
-                                        const newChoices = doc.data().choices;
-                                        newChoices[index].votes = (newChoices[index].votes || 0) + 1;
-                                        transaction.update(pollDoc, { choices: newChoices });
-                                    });
-                                    alert('投票成功！');
-                                    fetchPolls(); // 刷新列表以显示新结果
-                                } catch (error) {
-                                    console.error('投票失败:', error);
-                                    alert('投票失败，请检查控制台。');
-                                }
-                            });
-                            choicesDiv.appendChild(choiceBtn);
-                        });
-                        pollItem.appendChild(choicesDiv);
-                        pollList.appendChild(pollItem);
-                    });
-                }
-            } catch (error) {
-                console.error('获取问题失败:', error);
-                pollList.innerHTML = '<p style="color:red;">加载失败，请刷新重试。</p>';
-            } finally {
-                loadingDiv.style.display = 'none';
-            }
-        }
+    // 动态添加选项
+    addChoiceBtn.addEventListener('click', () => {
+      const index = choicesContainer.querySelectorAll('.choice-input').length + 1;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'choice-input';
+      input.placeholder = `选项 ${index}`;
+      choicesContainer.appendChild(input);
+    });
 
-        newPollForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
+    // 获取并渲染投票列表
+    async function fetchPolls() {
+      loadingDiv.style.display = 'block';
+      pollList.innerHTML = '';
+      try {
+        const snapshot = await db.collection('polls').orderBy('createdAt', 'desc').get();
+        if (snapshot.empty) {
+          pollList.innerHTML = '<p>暂无问题，快去发布一个吧！</p>';
+        } else {
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const { question, choices } = data;
+            const totalVotes = choices.reduce((sum, c) => sum + (c.votes || 0), 0);
 
-            const question = document.getElementById('question-input').value;
-            const choiceInputs = Array.from(document.querySelectorAll('.choice-input'));
-            const choices = choiceInputs
-                .map(input => input.value.trim())
-                .filter(value => value !== '');
+            const item = document.createElement('div');
+            item.className = 'poll-item';
+            item.innerHTML = `<h3>${question}</h3>`;
 
-            if (question && choices.length >= 2) {
+            const btnContainer = document.createElement('div');
+            btnContainer.className = 'choices';
+
+            choices.forEach((c, idx) => {
+              // 选项按钮
+              const btn = document.createElement('button');
+              btn.textContent = `${c.text} (${c.votes || 0}票)`;
+              btn.onclick = async () => {
                 try {
-                    await db.collection('polls').add({
-                        question: question,
-                        choices: choices.map(text => ({ text, votes: 0 })),
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    });
-                    alert('发布成功！');
-                    newPollForm.reset();
-                    showPage('home-page');
-                    fetchPolls();
-                } catch (error) {
-                    console.error('发布失败:', error);
-                    alert('发布失败，请检查控制台。');
+                  await db.runTransaction(async t => {
+                    const ref = db.collection('polls').doc(doc.id);
+                    const snap = await t.get(ref);
+                    const arr = snap.data().choices;
+                    arr[idx].votes = (arr[idx].votes || 0) + 1;
+                    t.update(ref, { choices: arr });
+                  });
+                  fetchPolls();
+                } catch (err) {
+                  console.error(err);
+                  alert('投票失败，请重试');
                 }
-            } else {
-                alert('请填写问题和至少两个选项。');
-            }
-        });
+              };
+              btnContainer.appendChild(btn);
 
-        // 页面初始化
-        showPage('home-page');
+              // 结果条形图
+              if (totalVotes > 0) {
+                const percent = ((c.votes || 0) / totalVotes * 100).toFixed(1);
+                const barWrap = document.createElement('div');
+                barWrap.className = 'result-bar-container';
+                const bar = document.createElement('div');
+                bar.className = 'result-bar';
+                bar.style.width = `${percent}%`;
+                bar.textContent = `${percent}%`;
+                barWrap.appendChild(bar);
+                btnContainer.appendChild(barWrap);
+              }
+            });
+
+            item.appendChild(btnContainer);
+            pollList.appendChild(item);
+          });
+        }
+      } catch (e) {
+        console.error(e);
+        pollList.innerHTML = '<p style="color:red;">加载失败，请刷新重试。</p>';
+      } finally {
+        loadingDiv.style.display = 'none';
+      }
+    }
+
+    // 发布新问题
+    newPollForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const question = document.getElementById('question-input').value.trim();
+      const texts = Array.from(document.querySelectorAll('.choice-input'))
+        .map(i => i.value.trim())
+        .filter(v => v);
+
+      if (!question || texts.length < 2) {
+        return alert('请填写问题，并至少添加两个选项');
+      }
+
+      try {
+        await db.collection('polls').add({
+          question,
+          choices: texts.map(t => ({ text: t, votes: 0 })),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        newPollForm.reset();
+        // 重置默认两个选项
+        choicesContainer.innerHTML = `
+          <input type="text" class="choice-input" placeholder="选项 1" required />
+          <input type="text" class="choice-input" placeholder="选项 2" required />
+        `;
+        showPage('home');
         fetchPolls();
-    </script>
+      } catch (err) {
+        console.error(err);
+        alert('发布失败，请检查控制台');
+      }
+    });
+
+    // 初始化
+    showPage('home');
+    fetchPolls();
+  </script>
 </body>
 </html>
