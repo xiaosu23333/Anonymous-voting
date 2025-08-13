@@ -73,15 +73,20 @@
         const loadingDiv = document.getElementById('loading');
         const newPollForm = document.getElementById('new-poll-form');
 
-        homeBtn.addEventListener('click', () => {
-            homePage.style.display = 'block';
+        // 页面切换函数
+        function showPage(pageId) {
+            homePage.style.display = 'none';
             publishPage.style.display = 'none';
+            document.getElementById(pageId).style.display = 'block';
+        }
+
+        homeBtn.addEventListener('click', () => {
+            showPage('home-page');
             fetchPolls();
         });
 
         publishBtn.addEventListener('click', () => {
-            homePage.style.display = 'none';
-            publishPage.style.display = 'block';
+            showPage('publish-page');
         });
 
         async function fetchPolls() {
@@ -110,7 +115,6 @@
                             choiceBtn.addEventListener('click', async () => {
                                 // 投票逻辑
                                 try {
-                                    // 获取当前文档
                                     const pollDoc = db.collection('polls').doc(pollId);
                                     await db.runTransaction(async (transaction) => {
                                         const doc = await transaction.get(pollDoc);
@@ -161,7 +165,8 @@
                     });
                     alert('发布成功！');
                     newPollForm.reset();
-                    homeBtn.click();
+                    showPage('home-page');
+                    fetchPolls();
                 } catch (error) {
                     console.error('发布失败:', error);
                     alert('发布失败，请检查控制台。');
@@ -172,6 +177,7 @@
         });
 
         // 初始化
+        showPage('home-page');
         fetchPolls();
     </script>
 </body>
