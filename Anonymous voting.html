@@ -3,24 +3,17 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <title>匿名问答 · 单文件应用</title>
+  <title>匿名问答 · 调试版</title>
   <style>
-    body { font-family: sans-serif; max-width: 700px; margin: auto; padding: 20px; }
-    header { display: flex; justify-content: space-between; align-items: center; }
-    nav a, button {
-      padding: 6px 12px; background: #0078D4; color: #fff;
-      text-decoration: none; border: none; border-radius: 4px; cursor: pointer;
-      display: inline-block; margin-left: 6px;
-    }
-    .card { padding: 12px; margin: 12px 0; border: 1px solid #ddd; border-radius: 6px; }
-    section { display: none; }
-    section.active { display: block; }
-    textarea, input { width: 100%; margin: 6px 0; padding: 8px; box-sizing: border-box; }
-    .option, .result { margin: 6px 0; }
+    body{font-family:sans-serif;max-width:700px;margin:auto;padding:20px;}
+    header{display:flex;justify-content:space-between;align-items:center;}
+    nav a,button{padding:6px 12px;background:#0078D4;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;}
+    .card{padding:12px;margin:12px 0;border:1px solid #ddd;border-radius:6px;}
+    section{display:none;}section.active{display:block;}
+    textarea,input{width:100%;margin:6px 0;padding:8px;box-sizing:border-box;}
   </style>
 </head>
 <body>
-
   <header>
     <h1>匿名问答</h1>
     <nav>
@@ -29,22 +22,19 @@
     </nav>
   </header>
 
-  <!-- 首页：问题列表 -->
   <section id="view-list" class="active">
     <div id="list">加载中…</div>
   </section>
 
-  <!-- 发布页：新问题 -->
   <section id="view-ask">
     <h2>➕ 发布新问题</h2>
     <textarea id="qText" rows="2" placeholder="写下你的问题…"></textarea>
     <input id="o1" placeholder="选项 A">
     <input id="o2" placeholder="选项 B">
-    <input id="o3" placeholder="选项 C（可留空）">
+    <input id="o3" placeholder="选项 C （可留空）">
     <button id="postBtn">发布问题</button>
   </section>
 
-  <!-- 投票页：具体投票与统计 -->
   <section id="view-poll">
     <div id="pollContent">加载中…</div>
   </section>
@@ -55,18 +45,21 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      // —— 步骤1：填入你的 Firebase 配置 —— 
+      // —— 步骤1：使用控制台复制的完整配置 —— 
       const firebaseConfig = {
         apiKey: "YOUR_API_KEY",
         authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
         projectId: "YOUR_PROJECT_ID",
-        // 其余字段可选
+        storageBucket: "YOUR_PROJECT_ID.appspot.com",
+        messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+        appId: "YOUR_APP_ID",
+        measurementId: "YOUR_MEASUREMENT_ID"
       };
       firebase.initializeApp(firebaseConfig);
       const db = firebase.firestore();
       const pollsCol = db.collection('polls');
 
-      // 路由：根据 location.hash 控制视图显示
+      // 路由控制
       function router() {
         const hash = location.hash.split('?')[0];
         document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
@@ -82,43 +75,35 @@
         }
       }
 
-      // 加载问题列表
+      // 加载列表
       function loadList() {
         const list = document.getElementById('list');
-        list.innerHTML = '加载中…';
-        pollsCol.orderBy('createdAt', 'desc').get()
+        list.textContent = '加载中…';
+        pollsCol.orderBy('createdAt','desc').get()
           .then(snap => {
-            if (snap.empty) {
-              list.innerHTML = '<p>暂无问题，快去发布一个吧！</p>';
-              return;
-            }
+            if (snap.empty) return list.innerHTML = '<p>暂无问题，去发布吧！</p>';
             list.innerHTML = '';
             snap.forEach(doc => {
               const d = doc.data();
               const div = document.createElement('div');
               div.className = 'card';
-              div.innerHTML = `
-                <h3>${d.question}</h3>
-                <a href="#/poll?id=${doc.id}">去回答 →</a>
-              `;
+              div.innerHTML = `<h3>${d.question}</h3><a href="#/poll?id=${doc.id}">去回答 →</a>`;
               list.appendChild(div);
             });
           })
           .catch(err => {
             console.error('加载列表失败：', err);
-            list.innerHTML = '<p>加载失败，请刷新重试</p>';
+            list.innerHTML = '<p>加载错误，请刷新重试</p>';
           });
       }
 
-      // 发布新问题
-      document.getElementById('postBtn').addEventListener('click', async () => {
+      // 发布事件
+      document.getElementById('postBtn').onclick = async () => {
         const question = document.getElementById('qText').value.trim();
         const opts = ['o1','o2','o3']
           .map(id => document.getElementById(id).value.trim())
           .filter(v => v);
-        if (!question || opts.length < 2) {
-          return alert('请填写问题并至少两个选项');
-        }
+        if (!question || opts.length < 2) return alert('请填写问题并至少两个选项');
         try {
           await pollsCol.add({
             question,
@@ -131,48 +116,31 @@
           console.error('发布失败：', err);
           alert('发布失败，请查看控制台');
         }
-      });
+      };
 
-      // 加载并渲染单个问题及投票
+      // 加载单个投票
       function loadPoll(id) {
         const content = document.getElementById('pollContent');
-        if (!id) {
-          content.innerHTML = '<p>无效链接。</p>';
-          return;
-        }
-        content.innerHTML = '加载中…';
+        if (!id) return content.innerHTML = '<p>无效链接。</p>';
+        content.textContent = '加载中…';
         pollsCol.doc(id).onSnapshot(doc => {
-          if (!doc.exists) {
-            content.innerHTML = '<p>问题不存在或已删除。</p>';
-            return;
-          }
+          if (!doc.exists) return content.innerHTML = '<p>问题不存在或已删除。</p>';
           const data = doc.data();
           let html = `<h2>${data.question}</h2>`;
-          data.options.forEach((opt, i) => {
-            html += `
-              <div class="option">
-                <input type="radio" name="vote" value="${i}"> ${opt}
-              </div>
-            `;
+          data.options.forEach((opt,i) => {
+            html += `<div class="option"><input type="radio" name="vote" value="${i}"> ${opt}</div>`;
           });
-          html += `<button id="voteBtn">提交回答</button>`;
-          html += `<div id="results"><h3>当前统计：</h3></div>`;
+          html += `<button id="voteBtn">提交回答</button><div id="results"><h3>当前统计：</h3></div>`;
           content.innerHTML = html;
-
-          // 渲染统计
           const resDiv = document.getElementById('results');
-          data.options.forEach((opt, i) => {
-            const count = data.votes[i] || 0;
-            resDiv.innerHTML += `<p class="result">${opt}：${count} 次</p>`;
+          data.options.forEach((opt,i) => {
+            resDiv.innerHTML += `<p class="result">${opt}：${data.votes[i]||0} 次</p>`;
           });
-
-          // 绑定投票按钮
           document.getElementById('voteBtn').onclick = async () => {
             const sel = document.querySelector('input[name="vote"]:checked');
             if (!sel) return alert('请选择一个选项');
-            const idx = Number(sel.value);
             const newVotes = data.votes.slice();
-            newVotes[idx] = (newVotes[idx] || 0) + 1;
+            newVotes[+sel.value] = (newVotes[+sel.value]||0) + 1;
             try {
               await pollsCol.doc(id).update({ votes: newVotes });
             } catch (err) {
@@ -182,13 +150,11 @@
           };
         }, err => {
           console.error('加载问题失败：', err);
-          document.getElementById('pollContent').innerHTML = '<p>加载失败，请刷新</p>';
+          content.innerHTML = '<p>加载失败，请刷新</p>';
         });
       }
 
-      // 监控 hash 变化
       window.addEventListener('hashchange', router);
-      // 初始加载
       router();
     });
   </script>
