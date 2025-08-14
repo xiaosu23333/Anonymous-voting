@@ -1,305 +1,238 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>匿名问答</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      max-width: 800px;
-      margin: auto;
-      padding: 20px;
-      line-height: 1.6;
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+<script>
+  // ===============================
+  // Firebase 配置（保持你原来的）
+  // ===============================
+  const firebaseConfig = {
+    apiKey: "AIzaSyBGz2BaihKW1xTr2yfu03Efm7YBuNskpvx0",
+    authDomain: "anonymous-voting-f6f92.firebaseapp.com",
+    projectId: "anonymous-voting-f6f92",
+    storageBucket: "anonymous-voting-f6f92.appspot.com",
+    messagingSenderId: "662798484522",
+    appId: "1:662798484522:web:491fe44a97fa809323ef53",
+    measurementId: "G-M3VYPKWG8T"
+  };
+  // 某些环境多次加载会抛 already exists，这里兜底一下
+  try { firebase.initializeApp(firebaseConfig); } catch (e) {}
+  let db = null;
+  try { db = firebase.firestore(); } catch (e) { db = null; }
+
+  // ===============================
+  // 后端选择：本地自动用 LocalStorage，线上用 Firebase
+  // ===============================
+  const AUTO_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname) || location.protocol === 'file:';
+  let USE_LOCAL = AUTO_LOCAL || !db;
+
+  // 也可以手动强制本地模式（需要时把 false 改成 true）
+  const FORCE_LOCAL = false;
+  if (FORCE_LOCAL) USE_LOCAL = true;
+
+  // ===============================
+  // LocalStorage 简易后端
+  // 结构：[{ id, question, choices:[{text,votes}], createdAt }]
+  // ===============================
+  const LS_KEY = 'polls_v1';
+
+  const LocalStore = {
+    _load() {
+      try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
+      catch { return []; }
+    },
+    _save(arr) {
+      localStorage.setItem(LS_KEY, JSON.stringify(arr));
+    },
+    async list() {
+      const arr = this._load();
+      arr.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+      return arr.map(p => ({ id: p.id, data: p }));
+    },
+    async add({ question, choices }) {
+      const id = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+      const all = this._load();
+      all.push({ id, question, choices, createdAt: Date.now() });
+      this._save(all);
+      return id;
+    },
+    async vote(id, idx) {
+      const all = this._load();
+      const i = all.findIndex(p => p.id === id);
+      if (i === -1) throw new Error('该问题不存在');
+      if (!all[i].choices[idx]) throw new Error('选项不存在');
+      all[i].choices[idx].votes = Number(all[i].choices[idx].votes || 0) + 1;
+      this._save(all);
     }
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
+  };
+
+  // ===============================
+  // 设备级防重复投票（每题一次）
+  // ===============================
+  const votedKey = (id) => `voted:${id}`;
+  const hasVoted = (id) => !!localStorage.getItem(votedKey(id));
+  const markVoted = (id) => localStorage.setItem(votedKey(id), '1');
+
+  // ===============================
+  // 元素引用
+  // ===============================
+  const homeBtn = document.getElementById('home-btn');
+  const publishBtn = document.getElementById('publish-btn');
+  const homePage = document.getElementById('home-page');
+  const publishPage = document.getElementById('publish-page');
+  const pollList = document.getElementById('poll-list');
+  const loadingDiv = document.getElementById('loading');
+  const newPollForm = document.getElementById('new-poll-form');
+  const choicesContainer = document.getElementById('choices-container');
+  const addChoiceBtn = document.getElementById('add-choice-btn');
+  const questionInput = document.getElementById('question-input');
+
+  // ===============================
+  // 页面切换
+  // ===============================
+  function showPage(page) {
+    homePage.classList.remove('active');
+    publishPage.classList.remove('active');
+    homeBtn.classList.remove('active');
+    publishBtn.classList.remove('active');
+
+    if (page === 'home') {
+      homePage.classList.add('active');
+      homeBtn.classList.add('active');
+    } else {
+      publishPage.classList.add('active');
+      publishBtn.classList.add('active');
+      setTimeout(() => questionInput?.focus(), 0);
     }
-    .header h1 { margin: 0; }
-    .header button {
-      padding: 8px 16px;
-      font-size: 16px;
-      cursor: pointer;
-      border: none;
-      border-radius: 4px;
-      background-color: #007bff;
-      color: #fff;
-      margin-left: 8px;
-    }
-    .header button.active { background-color: #0056b3; }
-    #home-page, #publish-page { display: none; }
-    #home-page.active, #publish-page.active { display: block; }
-    .poll-list { margin-top: 20px; }
-    .poll-item {
-      border: 1px solid #ddd;
-      padding: 15px;
-      margin-bottom: 12px;
-      border-radius: 8px;
-    }
-    .poll-item h3 { margin: 0 0 10px 0; }
-    .choices button {
-      display: block;
-      width: 100%;
-      text-align: left;
-      padding: 10px;
-      margin: 6px 0;
-      border: 1px solid #ccc;
-      background-color: #f9f9f9;
-      cursor: pointer;
-      border-radius: 4px;
-    }
-    .choices button:hover { background-color: #e9e9e9; }
-    .choices button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .result-line {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 4px 0 10px;
-      color: #555;
-      font-size: 14px;
-    }
-    .result-bar-container {
-      flex: 1;
-      background-color: #f0f0f0;
-      border-radius: 4px;
-      overflow: hidden;
-      height: 20px;
-    }
-    .result-bar {
-      height: 20px;
-      background-color: #007bff;
-      color: #fff;
-      text-align: right;
-      padding-right: 5px;
-      line-height: 20px;
-      transition: width 0.5s ease-in-out;
-      white-space: nowrap;
-    }
-    #new-poll-form input {
-      display: block;
-      width: 100%;
-      padding: 8px;
-      margin-bottom: 10px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      box-sizing: border-box;
-    }
-    #new-poll-form button {
-      width: 100%;
-      padding: 10px;
-      background-color: #28a745;
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      font-size: 16px;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-    #add-choice-btn {
-      width: 100%;
-      padding: 8px;
-      background-color: #17a2b8;
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      font-size: 14px;
-      cursor: pointer;
-      margin-bottom: 8px;
-    }
-    #loading { text-align: center; color: #888; }
-    .hint { color: #777; font-size: 14px; margin-top: 6px; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>匿名问答</h1>
-    <div>
-      <button id="home-btn" class="active">首页</button>
-      <button id="publish-btn">➕ 发布</button>
-    </div>
-  </div>
+  }
 
-  <!-- 首页 -->
-  <div id="home-page" class="active">
-    <div id="loading">加载中...</div>
-    <div id="poll-list" class="poll-list"></div>
-  </div>
+  homeBtn.addEventListener('click', () => {
+    showPage('home');
+    fetchPolls();
+  });
+  publishBtn.addEventListener('click', () => showPage('publish'));
 
-  <!-- 发布页 -->
-  <div id="publish-page">
-    <h2>➕ 发布新问题</h2>
-    <form id="new-poll-form">
-      <input type="text" id="question-input" placeholder="输入问题" autocomplete="off" required />
-      <div id="choices-container">
-        <input type="text" class="choice-input" placeholder="选项 1" autocomplete="off" required />
-        <input type="text" class="choice-input" placeholder="选项 2" autocomplete="off" required />
-      </div>
-      <button id="add-choice-btn" type="button">➕ 添加选项</button>
-      <div class="hint">至少保留两个选项，最多 10 个。</div>
-      <button type="submit">发布问题</button>
-    </form>
-  </div>
+  // 动态添加选项（最多 10 个）
+  addChoiceBtn.addEventListener('click', () => {
+    const current = choicesContainer.querySelectorAll('.choice-input').length;
+    if (current >= 10) { alert('最多添加 10 个选项'); return; }
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'choice-input';
+    input.placeholder = `选项 ${current + 1}`;
+    input.autocomplete = 'off';
+    choicesContainer.appendChild(input);
+    input.focus();
+  });
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-  <script>
-    // Firebase 配置
-    const firebaseConfig = {
-      apiKey: "AIzaSyBGz2BaihKW1xTr2yfu03Efm7YBuNskpvx0",
-      authDomain: "anonymous-voting-f6f92.firebaseapp.com",
-      projectId: "anonymous-voting-f6f92",
-      storageBucket: "anonymous-voting-f6f92.appspot.com",
-      messagingSenderId: "662798484522",
-      appId: "1:662798484522:web:491fe44a97fa809323ef53",
-      measurementId: "G-M3VYPKWG8T"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+  // ===============================
+  // 渲染投票项
+  // ===============================
+  function createPollItem(docId, data) {
+    const item = document.createElement('div');
+    item.className = 'poll-item';
 
-    // 元素引用
-    const homeBtn = document.getElementById('home-btn');
-    const publishBtn = document.getElementById('publish-btn');
-    const homePage = document.getElementById('home-page');
-    const publishPage = document.getElementById('publish-page');
-    const pollList = document.getElementById('poll-list');
-    const loadingDiv = document.getElementById('loading');
-    const newPollForm = document.getElementById('new-poll-form');
-    const choicesContainer = document.getElementById('choices-container');
-    const addChoiceBtn = document.getElementById('add-choice-btn');
-    const questionInput = document.getElementById('question-input');
+    const title = document.createElement('h3');
+    title.textContent = String(data.question || '').trim() || '(未命名问题)';
+    item.appendChild(title);
 
-    // 页面切换
-    function showPage(page) {
-      homePage.classList.remove('active');
-      publishPage.classList.remove('active');
-      homeBtn.classList.remove('active');
-      publishBtn.classList.remove('active');
+    const btnContainer = document.createElement('div');
+    btnContainer.className = 'choices';
 
-      if (page === 'home') {
-        homePage.classList.add('active');
-        homeBtn.classList.add('active');
-      } else {
-        publishPage.classList.add('active');
-        publishBtn.classList.add('active');
-        // 延时聚焦，确保元素可见
-        setTimeout(() => questionInput?.focus(), 0);
-      }
-    }
+    const rawChoices = Array.isArray(data.choices) ? data.choices : [];
+    const choices = rawChoices.map(c => ({
+      text: String((c && c.text) || ''),
+      votes: Number((c && c.votes) || 0)
+    }));
+    const totalVotes = choices.reduce((sum, c) => sum + c.votes, 0);
 
-    homeBtn.addEventListener('click', () => {
-      showPage('home');
-      fetchPolls();
-    });
+    const voted = hasVoted(docId);
 
-    publishBtn.addEventListener('click', () => showPage('publish'));
-
-    // 动态添加选项（最多 10 个）
-    addChoiceBtn.addEventListener('click', () => {
-      const current = choicesContainer.querySelectorAll('.choice-input').length;
-      if (current >= 10) {
-        alert('最多添加 10 个选项');
-        return;
-      }
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.className = 'choice-input';
-      input.placeholder = `选项 ${current + 1}`;
-      input.autocomplete = 'off';
-      choicesContainer.appendChild(input);
-      input.focus();
-    });
-
-    // 渲染一个投票项（安全 textContent）
-    function createPollItem(docId, data) {
-      const item = document.createElement('div');
-      item.className = 'poll-item';
-
-      const title = document.createElement('h3');
-      title.textContent = String(data.question || '').trim() || '(未命名问题)';
-      item.appendChild(title);
-
-      const btnContainer = document.createElement('div');
-      btnContainer.className = 'choices';
-
-      const rawChoices = Array.isArray(data.choices) ? data.choices : [];
-      const choices = rawChoices.map(c => ({
-        text: String((c && c.text) || ''),
-        votes: Number((c && c.votes) || 0)
-      }));
-      const totalVotes = choices.reduce((sum, c) => sum + c.votes, 0);
-
-      choices.forEach((c, idx) => {
-        // 选项按钮
-        const btn = document.createElement('button');
-        btn.textContent = `${c.text || '(未命名选项)'}（${c.votes}票）`;
-        btn.addEventListener('click', async () => {
-          btn.disabled = true;
-          try {
+    choices.forEach((c, idx) => {
+      // 选项按钮
+      const btn = document.createElement('button');
+      btn.textContent = `${c.text || '(未命名选项)'}（${c.votes}票）`;
+      btn.disabled = voted; // 已投过票则禁用所有选项
+      btn.addEventListener('click', async () => {
+        if (hasVoted(docId)) { return; }
+        btn.disabled = true;
+        try {
+          if (USE_LOCAL) {
+            await LocalStore.vote(docId, idx);
+          } else {
             const ref = db.collection('polls').doc(docId);
             await db.runTransaction(async (t) => {
               const snap = await t.get(ref);
               if (!snap.exists) throw new Error('该问题不存在或已被删除');
               const arr = Array.isArray(snap.data().choices) ? snap.data().choices : [];
               if (!arr[idx]) throw new Error('选项不存在');
-              const currentVotes = Number(arr[idx].votes || 0);
               arr[idx] = {
                 text: String((arr[idx].text || '')),
-                votes: currentVotes + 1
+                votes: Number(arr[idx].votes || 0) + 1
               };
               t.update(ref, { choices: arr });
             });
-            // 刷新
-            await fetchPolls();
-          } catch (err) {
-            console.error('投票失败:', err);
-            alert('投票失败，请重试');
-          } finally {
-            btn.disabled = false;
           }
-        });
-        btnContainer.appendChild(btn);
-
-        // 结果行：总票为 0 不显示条形，仅显示“0票”
-        const line = document.createElement('div');
-        line.className = 'result-line';
-        const countText = document.createElement('span');
-        if (totalVotes > 0) {
-          const percent = ((c.votes / totalVotes) * 100).toFixed(1);
-          const barWrap = document.createElement('div');
-          barWrap.className = 'result-bar-container';
-          const bar = document.createElement('div');
-          bar.className = 'result-bar';
-          bar.style.width = `${percent}%`;
-          bar.textContent = `${percent}%`;
-          barWrap.appendChild(bar);
-          line.appendChild(barWrap);
-          countText.textContent = `${c.votes} 票`;
-        } else {
-          countText.textContent = `${c.votes} 票`;
+          // 标记本设备已投
+          markVoted(docId);
+          await fetchPolls();
+        } catch (err) {
+          console.error('投票失败:', err);
+          alert('投票失败，请重试');
+        } finally {
+          btn.disabled = false;
         }
-        line.appendChild(countText);
-        btnContainer.appendChild(line);
       });
+      btnContainer.appendChild(btn);
 
-      // 总票提示
-      const hint = document.createElement('div');
-      hint.className = 'hint';
-      hint.textContent = `总票数：${totalVotes}`;
-      item.appendChild(btnContainer);
-      item.appendChild(hint);
+      // 结果行：总票为 0 不显示条形，仅显示“0票”
+      const line = document.createElement('div');
+      line.className = 'result-line';
+      const countText = document.createElement('span');
+      if (totalVotes > 0) {
+        const percent = ((c.votes / totalVotes) * 100).toFixed(1);
+        const barWrap = document.createElement('div');
+        barWrap.className = 'result-bar-container';
+        const bar = document.createElement('div');
+        bar.className = 'result-bar';
+        bar.style.width = `${percent}%`;
+        bar.textContent = `${percent}%`;
+        barWrap.appendChild(bar);
+        line.appendChild(barWrap);
+        countText.textContent = `${c.votes} 票`;
+      } else {
+        countText.textContent = `${c.votes} 票`;
+      }
+      line.appendChild(countText);
+      btnContainer.appendChild(line);
+    });
 
-      return item;
-    }
+    // 总票提示
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = `总票数：${totalVotes}`;
+    item.appendChild(btnContainer);
+    item.appendChild(hint);
 
-    // 加载并渲染投票列表
-    async function fetchPolls() {
-      loadingDiv.style.display = 'block';
-      pollList.innerHTML = '';
-      try {
+    return item;
+  }
+
+  // ===============================
+  // 加载并渲染投票列表（支持双后端）
+  // ===============================
+  async function fetchPolls() {
+    loadingDiv.style.display = 'block';
+    pollList.innerHTML = '';
+    try {
+      if (USE_LOCAL) {
+        const items = await LocalStore.list();
+        if (!items.length) {
+          pollList.innerHTML = '<p>暂无问题，快去发布一个吧！</p>';
+        } else {
+          for (const { id, data } of items) {
+            const item = createPollItem(id, data);
+            pollList.appendChild(item);
+          }
+        }
+      } else {
         const snapshot = await db.collection('polls').orderBy('createdAt', 'desc').get();
         if (snapshot.empty) {
           pollList.innerHTML = '<p>暂无问题，快去发布一个吧！</p>';
@@ -310,67 +243,85 @@
             pollList.appendChild(item);
           });
         }
-      } catch (e) {
-        console.error('获取问题失败:', e);
-        pollList.innerHTML = '<p style="color:red;">加载失败，请刷新重试。</p>';
-      } finally {
-        loadingDiv.style.display = 'none';
       }
+    } catch (e) {
+      console.error('获取问题失败:', e);
+      // Firebase 出错时自动切回本地
+      if (!USE_LOCAL) {
+        USE_LOCAL = true;
+        console.warn('已自动切换到本地模式（LocalStorage）');
+        return fetchPolls();
+      }
+      pollList.innerHTML = '<p style="color:red;">加载失败，请刷新重试。</p>';
+    } finally {
+      loadingDiv.style.display = 'none';
     }
+  }
 
-    // 发布新问题
-    newPollForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const question = questionInput.value.trim();
-      const texts = Array
-        .from(document.querySelectorAll('.choice-input'))
-        .map(i => i.value.trim())
-        .filter(v => v);
+  // ===============================
+  // 发布新问题（支持双后端）
+  // ===============================
+  newPollForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const question = questionInput.value.trim();
+    const texts = Array
+      .from(document.querySelectorAll('.choice-input'))
+      .map(i => i.value.trim())
+      .filter(v => v);
 
-      if (!question) {
-        alert('请填写问题');
-        questionInput.focus();
-        return;
-      }
-      if (texts.length < 2) {
-        alert('请至少填写两个选项');
-        return;
-      }
-      if (texts.length > 10) {
-        alert('最多 10 个选项');
-        return;
-      }
+    if (!question) {
+      alert('请填写问题');
+      questionInput.focus();
+      return;
+    }
+    if (texts.length < 2) { alert('请至少填写两个选项'); return; }
+    if (texts.length > 10) { alert('最多 10 个选项'); return; }
 
-      // 去重与防止全相同
-      const unique = Array.from(new Set(texts));
-      if (unique.length < 2) {
-        alert('至少需要两个不同的选项');
-        return;
-      }
+    const unique = Array.from(new Set(texts));
+    if (unique.length < 2) { alert('至少需要两个不同的选项'); return; }
 
-      try {
+    try {
+      if (USE_LOCAL) {
+        await LocalStore.add({
+          question,
+          choices: unique.map(t => ({ text: t, votes: 0 }))
+        });
+      } else {
         await db.collection('polls').add({
           question,
           choices: unique.map(t => ({ text: t, votes: 0 })),
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-        // 重置表单为默认两项
-        newPollForm.reset();
-        choicesContainer.innerHTML = `
-          <input type="text" class="choice-input" placeholder="选项 1" autocomplete="off" required />
-          <input type="text" class="choice-input" placeholder="选项 2" autocomplete="off" required />
-        `;
+      }
+
+      // 重置表单为默认两项
+      newPollForm.reset();
+      choicesContainer.innerHTML = `
+        <input type="text" class="choice-input" placeholder="选项 1" autocomplete="off" required />
+        <input type="text" class="choice-input" placeholder="选项 2" autocomplete="off" required />
+      `;
+      showPage('home');
+      fetchPolls();
+    } catch (err) {
+      console.error('发布失败:', err);
+      if (!USE_LOCAL) {
+        // Firebase 出错时自动切回本地再试一次
+        USE_LOCAL = true;
+        await LocalStore.add({
+          question,
+          choices: unique.map(t => ({ text: t, votes: 0 }))
+        });
         showPage('home');
         fetchPolls();
-      } catch (err) {
-        console.error('发布失败:', err);
-        alert('发布失败，请检查控制台');
+        return;
       }
-    });
+      alert('发布失败，请检查控制台');
+    }
+  });
 
-    // 初始化
-    showPage('home');
-    fetchPolls();
-  </script>
-</body>
-</html>
+  // ===============================
+  // 初始化
+  // ===============================
+  showPage('home');
+  fetchPolls();
+</script>
